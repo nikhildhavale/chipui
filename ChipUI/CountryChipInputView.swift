@@ -7,10 +7,46 @@
 
 import UIKit
 
+enum ChipIcon {
+    case system(String)
+    case fontAwesome(String)
+    case title(String)
+
+    var image: UIImage? {
+        switch self {
+        case .system(let name):
+            return UIImage(systemName: name)
+        case .fontAwesome, .title:
+            return nil
+        }
+    }
+
+    var title: String? {
+        switch self {
+        case .title(let text):
+            return text
+        case .system, .fontAwesome:
+            return nil
+        }
+    }
+}
+
+struct ChipInputConfiguration {
+    var labelText: String = "To"
+    var ccIcon: ChipIcon?
+    var settingsIcon: ChipIcon?
+    var onCcTapped: (() -> Void)?
+    var onSettingsTapped: (() -> Void)?
+}
+
 final class CountryChipInputView: UIView {
 
     var onHeightChanged: (() -> Void)?
     var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
+
+    var configuration = ChipInputConfiguration() {
+        didSet { applyConfiguration() }
+    }
 
     private enum Item {
         case chip(String)
@@ -29,6 +65,9 @@ final class CountryChipInputView: UIView {
     private let fieldContainer = UIView()
     private let fieldLabel = UILabel()
     private let helperLabel = UILabel()
+    private let ccButton = UIButton(type: .system)
+    private let settingsButton = UIButton(type: .system)
+    private let trailingButtonsStack = UIStackView()
     private let chipCollectionView = IntrinsicCollectionView(
         frame: .zero,
         collectionViewLayout: CountryChipInputView.makeChipFlowLayout()
@@ -69,7 +108,41 @@ final class CountryChipInputView: UIView {
         clipsToBounds = false
         configureChipField()
         configureLayout()
+        applyConfiguration()
         updateAutocomplete()
+    }
+
+    private func applyConfiguration() {
+        fieldLabel.text = configuration.labelText
+
+        if let icon = configuration.ccIcon {
+            ccButton.setImage(icon.image, for: .normal)
+            ccButton.setTitle(icon.title, for: .normal)
+            ccButton.isHidden = false
+        } else {
+            ccButton.setImage(nil, for: .normal)
+            ccButton.setTitle(nil, for: .normal)
+            ccButton.isHidden = true
+        }
+
+        let shouldShowSettings = configuration.settingsIcon != nil && !selectedCountries.isEmpty
+        if shouldShowSettings, let icon = configuration.settingsIcon {
+            settingsButton.setImage(icon.image, for: .normal)
+            settingsButton.setTitle(icon.title, for: .normal)
+            settingsButton.isHidden = false
+        } else {
+            settingsButton.setImage(nil, for: .normal)
+            settingsButton.setTitle(nil, for: .normal)
+            settingsButton.isHidden = true
+        }
+    }
+
+    @objc private func ccButtonTapped() {
+        configuration.onCcTapped?()
+    }
+
+    @objc private func settingsButtonTapped() {
+        configuration.onSettingsTapped?()
     }
 
     private func configureChipField() {
@@ -78,12 +151,27 @@ final class CountryChipInputView: UIView {
         fieldContainer.layer.borderWidth = 1
         fieldContainer.layer.borderColor = UIColor.systemBlue.cgColor
 
-        fieldLabel.text = "To"
         fieldLabel.font = .preferredFont(forTextStyle: .caption1)
         fieldLabel.textColor = .systemBlue
         fieldLabel.adjustsFontForContentSizeCategory = true
         fieldLabel.setContentHuggingPriority(.required, for: .horizontal)
         fieldLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        ccButton.tintColor = .systemBlue
+        ccButton.setContentHuggingPriority(.required, for: .horizontal)
+        ccButton.addTarget(self, action: #selector(ccButtonTapped), for: .touchUpInside)
+
+        settingsButton.tintColor = .systemBlue
+        settingsButton.setContentHuggingPriority(.required, for: .horizontal)
+        settingsButton.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
+
+        trailingButtonsStack.axis = .horizontal
+        trailingButtonsStack.spacing = 12
+        trailingButtonsStack.alignment = .center
+        trailingButtonsStack.addArrangedSubview(ccButton)
+        trailingButtonsStack.addArrangedSubview(settingsButton)
+        trailingButtonsStack.setContentHuggingPriority(.required, for: .horizontal)
+        trailingButtonsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         helperLabel.font = .preferredFont(forTextStyle: .caption1)
         helperLabel.textColor = .secondaryLabel
@@ -112,11 +200,13 @@ final class CountryChipInputView: UIView {
         addSubview(fieldContainer)
         addSubview(helperLabel)
         fieldContainer.addSubview(fieldLabel)
+        fieldContainer.addSubview(trailingButtonsStack)
         fieldContainer.addSubview(chipCollectionView)
 
         fieldContainer.translatesAutoresizingMaskIntoConstraints = false
         helperLabel.translatesAutoresizingMaskIntoConstraints = false
         fieldLabel.translatesAutoresizingMaskIntoConstraints = false
+        trailingButtonsStack.translatesAutoresizingMaskIntoConstraints = false
         chipCollectionView.translatesAutoresizingMaskIntoConstraints = false
 
         chipCollectionHeightConstraint = chipCollectionView.heightAnchor.constraint(equalToConstant: 52)
@@ -129,8 +219,11 @@ final class CountryChipInputView: UIView {
             fieldLabel.leadingAnchor.constraint(equalTo: fieldContainer.leadingAnchor, constant: 12),
             fieldLabel.centerYAnchor.constraint(equalTo: chipCollectionView.topAnchor, constant: 28),
 
+            trailingButtonsStack.trailingAnchor.constraint(equalTo: fieldContainer.trailingAnchor, constant: -12),
+            trailingButtonsStack.centerYAnchor.constraint(equalTo: chipCollectionView.topAnchor, constant: 28),
+
             chipCollectionView.leadingAnchor.constraint(equalTo: fieldLabel.trailingAnchor, constant: 8),
-            chipCollectionView.trailingAnchor.constraint(equalTo: fieldContainer.trailingAnchor),
+            chipCollectionView.trailingAnchor.constraint(equalTo: trailingButtonsStack.leadingAnchor, constant: -8),
             chipCollectionView.topAnchor.constraint(equalTo: fieldContainer.topAnchor),
             chipCollectionView.bottomAnchor.constraint(equalTo: fieldContainer.bottomAnchor),
 
@@ -186,6 +279,7 @@ final class CountryChipInputView: UIView {
         chipCollectionView.reloadData()
         updateChipCollectionHeight()
         updateAutocomplete()
+        applyConfiguration()
 
         DispatchQueue.main.async { [weak self] in
             self?.focusTextEntry()
@@ -199,6 +293,7 @@ final class CountryChipInputView: UIView {
         chipCollectionView.reloadData()
         updateChipCollectionHeight()
         updateAutocomplete()
+        applyConfiguration()
 
         DispatchQueue.main.async { [weak self] in
             self?.focusTextEntry()
