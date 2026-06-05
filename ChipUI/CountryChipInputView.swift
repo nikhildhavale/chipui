@@ -138,19 +138,26 @@ final class CountryChipInputView: UIView {
         fieldContainer.convert(fieldContainer.bounds, to: view)
     }
 
-    func acceptSuggestion(_ country: String) {
-        addCountry(country)
+    func toggleSuggestion(_ country: String) {
+        if let index = selectedCountries.firstIndex(of: country) {
+            removeCountry(at: index)
+        } else {
+            addCountry(country, clearQuery: false)
+        }
+    }
+
+    func isSelected(_ country: String) -> Bool {
+        selectedCountries.contains(country)
     }
 
     private func updateAutocomplete() {
-        let availableCountries = countries.filter { !selectedCountries.contains($0) }
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmedQuery.isEmpty {
-            filteredCountries = Array(availableCountries.prefix(12))
-            helperLabel.text = "Type a country name or pick one from autocomplete."
+            filteredCountries = Array(countries.prefix(12))
+            helperLabel.text = ""
         } else {
-            filteredCountries = availableCountries.filter {
+            filteredCountries = countries.filter {
                 $0.localizedCaseInsensitiveContains(trimmedQuery)
             }
             helperLabel.text = filteredCountries.isEmpty ? "No matching countries." : "\(filteredCountries.count) matching countries"
@@ -159,12 +166,14 @@ final class CountryChipInputView: UIView {
         onAutocompleteChanged?(self, filteredCountries)
     }
 
-    private func addCountry(_ country: String) {
+    private func addCountry(_ country: String, clearQuery: Bool = true) {
         guard !selectedCountries.contains(country) else { return }
 
         selectedCountries.append(country)
-        query = ""
-        activeTextField?.text = ""
+        if clearQuery {
+            query = ""
+            activeTextField?.text = ""
+        }
         chipCollectionView.reloadData()
         updateChipCollectionHeight()
         updateAutocomplete()
@@ -295,7 +304,7 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
     }
 
     private func acceptCurrentSuggestion() {
-        guard let country = filteredCountries.first else { return }
+        guard let country = filteredCountries.first(where: { !selectedCountries.contains($0) }) else { return }
         addCountry(country)
     }
 }

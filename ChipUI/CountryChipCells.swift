@@ -129,6 +129,7 @@ final class ChipTextEntryCell: UICollectionViewCell, UITextFieldDelegate {
         textField.returnKeyType = .done
         textField.delegate = self
         textField.addTarget(self, action: #selector(textDidChange), for: .editingChanged)
+        textField.inputAccessoryView = makeKeyboardAccessoryToolbar()
 
         contentView.addSubview(textField)
         textField.translatesAutoresizingMaskIntoConstraints = false
@@ -148,6 +149,19 @@ final class ChipTextEntryCell: UICollectionViewCell, UITextFieldDelegate {
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         onReturn?()
         return false
+    }
+
+    private func makeKeyboardAccessoryToolbar() -> UIToolbar {
+        let toolbar = UIToolbar()
+        toolbar.sizeToFit()
+        let flexibleSpace = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+        let doneButton = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dismissKeyboard))
+        toolbar.items = [flexibleSpace, doneButton]
+        return toolbar
+    }
+
+    @objc private func dismissKeyboard() {
+        textField.resignFirstResponder()
     }
 }
 

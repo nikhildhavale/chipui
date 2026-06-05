@@ -36,6 +36,9 @@ final class ViewController: UIViewController {
         listViewController.onAutocompleteChanged = { [weak self] inputView, suggestions in
             self?.showAutocomplete(suggestions, anchoredTo: inputView)
         }
+        listViewController.onScroll = { [weak self] in
+            self?.positionAutocomplete()
+        }
 
         addChild(listViewController)
         view.addSubview(listViewController.view)
@@ -84,12 +87,22 @@ final class ViewController: UIViewController {
         activeChipInputView = inputView
         autocompleteSuggestions = suggestions
 
+        DispatchQueue.main.async { [weak self] in
+            self?.positionAutocomplete()
+        }
+    }
+
+    private func positionAutocomplete() {
+        guard let inputView = activeChipInputView else { return }
+        let suggestions = autocompleteSuggestions
+
+        view.layoutIfNeeded()
+
         let anchorFrame = inputView.autocompleteAnchorFrame(in: view)
         let preferredTop = anchorFrame.maxY + 6
         let keyboardTop = min(keyboardTopY, view.bounds.maxY)
         let availableBelow = keyboardTop - preferredTop - 8
-        let desiredHeight = suggestions.isEmpty ? 0 : min(CGFloat(suggestions.count) * 56, 280)
-        let overlayHeight = min(desiredHeight, max(0, availableBelow))
+        let overlayHeight = suggestions.isEmpty ? 0 : max(0, availableBelow)
 
         autocompleteTopConstraint?.constant = preferredTop
         autocompleteLeadingConstraint?.constant = anchorFrame.minX
@@ -145,18 +158,20 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "CountryCell", for: indexPath)
+        let country = autocompleteSuggestions[indexPath.row]
+        let isSelected = activeChipInputView?.isSelected(country) ?? false
         var content = cell.defaultContentConfiguration()
-        content.text = autocompleteSuggestions[indexPath.row]
+        content.text = country
         content.textProperties.numberOfLines = 0
-        content.secondaryText = "Tap to add country chip"
+        content.secondaryText = isSelected ? "Tap to remove country chip" : "Tap to add country chip"
         content.secondaryTextProperties.color = .secondaryLabel
         cell.contentConfiguration = content
-        cell.accessoryType = .detailDisclosureButton
+        cell.accessoryType = isSelected ? .checkmark : .none
         return cell
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        activeChipInputView?.acceptSuggestion(autocompleteSuggestions[indexPath.row])
+        activeChipInputView?.toggleSuggestion(autocompleteSuggestions[indexPath.row])
     }
 }

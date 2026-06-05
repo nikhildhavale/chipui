@@ -10,10 +10,15 @@ import UIKit
 final class CountriesListCollectionViewController: UICollectionViewController {
 
     var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
+    var onScroll: (() -> Void)?
 
     private enum Row: Int, CaseIterable {
         case header
         case countryChipInput
+    }
+
+    override func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        onScroll?()
     }
 
     init() {
