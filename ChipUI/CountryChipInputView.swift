@@ -78,10 +78,12 @@ final class CountryChipInputView: UIView {
         fieldContainer.layer.borderWidth = 1
         fieldContainer.layer.borderColor = UIColor.systemBlue.cgColor
 
-        fieldLabel.text = "Countries"
+        fieldLabel.text = "To"
         fieldLabel.font = .preferredFont(forTextStyle: .caption1)
         fieldLabel.textColor = .systemBlue
         fieldLabel.adjustsFontForContentSizeCategory = true
+        fieldLabel.setContentHuggingPriority(.required, for: .horizontal)
+        fieldLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         helperLabel.font = .preferredFont(forTextStyle: .caption1)
         helperLabel.textColor = .secondaryLabel
@@ -96,6 +98,14 @@ final class CountryChipInputView: UIView {
         chipCollectionView.contentInsetAdjustmentBehavior = .never
         chipCollectionView.register(CountryChipCell.self, forCellWithReuseIdentifier: CountryChipCell.reuseIdentifier)
         chipCollectionView.register(ChipTextEntryCell.self, forCellWithReuseIdentifier: ChipTextEntryCell.reuseIdentifier)
+
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleFieldTap))
+        tapGesture.cancelsTouchesInView = false
+        fieldContainer.addGestureRecognizer(tapGesture)
+    }
+
+    @objc private func handleFieldTap() {
+        focusTextEntry()
     }
 
     private func configureLayout() {
@@ -117,12 +127,11 @@ final class CountryChipInputView: UIView {
             fieldContainer.topAnchor.constraint(equalTo: topAnchor),
 
             fieldLabel.leadingAnchor.constraint(equalTo: fieldContainer.leadingAnchor, constant: 12),
-            fieldLabel.trailingAnchor.constraint(lessThanOrEqualTo: fieldContainer.trailingAnchor, constant: -12),
-            fieldLabel.topAnchor.constraint(equalTo: fieldContainer.topAnchor, constant: 8),
+            fieldLabel.centerYAnchor.constraint(equalTo: chipCollectionView.topAnchor, constant: 28),
 
-            chipCollectionView.leadingAnchor.constraint(equalTo: fieldContainer.leadingAnchor),
+            chipCollectionView.leadingAnchor.constraint(equalTo: fieldLabel.trailingAnchor, constant: 8),
             chipCollectionView.trailingAnchor.constraint(equalTo: fieldContainer.trailingAnchor),
-            chipCollectionView.topAnchor.constraint(equalTo: fieldLabel.bottomAnchor, constant: 2),
+            chipCollectionView.topAnchor.constraint(equalTo: fieldContainer.topAnchor),
             chipCollectionView.bottomAnchor.constraint(equalTo: fieldContainer.bottomAnchor),
 
             helperLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
@@ -199,8 +208,12 @@ final class CountryChipInputView: UIView {
     private func focusTextEntry() {
         let textEntryIndexPath = IndexPath(item: selectedCountries.count, section: 0)
         chipCollectionView.scrollToItem(at: textEntryIndexPath, at: .bottom, animated: false)
-        let cell = chipCollectionView.cellForItem(at: textEntryIndexPath) as? ChipTextEntryCell
-        cell?.focus()
+        chipCollectionView.layoutIfNeeded()
+        if let cell = chipCollectionView.cellForItem(at: textEntryIndexPath) as? ChipTextEntryCell {
+            cell.focus()
+        } else {
+            activeTextField?.becomeFirstResponder()
+        }
     }
 
     private func updateChipCollectionHeight() {
