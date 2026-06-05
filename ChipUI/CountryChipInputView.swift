@@ -7,7 +7,7 @@
 
 import UIKit
 
-enum ChipIcon {
+public enum ChipIcon {
     case system(String)
     case fontAwesome(String)
     case title(String)
@@ -31,20 +31,34 @@ enum ChipIcon {
     }
 }
 
-struct ChipInputConfiguration {
-    var labelText: String = "To"
-    var ccIcon: ChipIcon?
-    var settingsIcon: ChipIcon?
-    var onCcTapped: (() -> Void)?
-    var onSettingsTapped: (() -> Void)?
+public struct ChipInputConfiguration {
+    public var labelText: String
+    public var ccIcon: ChipIcon?
+    public var settingsIcon: ChipIcon?
+    public var onCcTapped: (() -> Void)?
+    public var onSettingsTapped: (() -> Void)?
+
+    public init(
+        labelText: String = "To",
+        ccIcon: ChipIcon? = nil,
+        settingsIcon: ChipIcon? = nil,
+        onCcTapped: (() -> Void)? = nil,
+        onSettingsTapped: (() -> Void)? = nil
+    ) {
+        self.labelText = labelText
+        self.ccIcon = ccIcon
+        self.settingsIcon = settingsIcon
+        self.onCcTapped = onCcTapped
+        self.onSettingsTapped = onSettingsTapped
+    }
 }
 
-final class CountryChipInputView: UIView {
+public final class CountryChipInputView: UIView {
 
-    var onHeightChanged: (() -> Void)?
-    var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
+    public var onHeightChanged: (() -> Void)?
+    public var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
 
-    var configuration = ChipInputConfiguration() {
+    public var configuration = ChipInputConfiguration() {
         didSet { applyConfiguration() }
     }
 
@@ -76,17 +90,17 @@ final class CountryChipInputView: UIView {
     private weak var activeTextField: UITextField?
     private var chipCollectionHeightConstraint: NSLayoutConstraint?
 
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         configure()
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         super.init(coder: coder)
         configure()
     }
 
-    override func layoutSubviews() {
+    public override func layoutSubviews() {
         super.layoutSubviews()
         updateChipCollectionHeight()
     }
@@ -236,11 +250,11 @@ final class CountryChipInputView: UIView {
         ])
     }
 
-    func autocompleteAnchorFrame(in view: UIView) -> CGRect {
+    public func autocompleteAnchorFrame(in view: UIView) -> CGRect {
         fieldContainer.convert(fieldContainer.bounds, to: view)
     }
 
-    func toggleSuggestion(_ country: String) {
+    public func toggleSuggestion(_ country: String) {
         if let index = selectedCountries.firstIndex(of: country) {
             removeCountry(at: index)
         } else {
@@ -248,7 +262,7 @@ final class CountryChipInputView: UIView {
         }
     }
 
-    func isSelected(_ country: String) -> Bool {
+    public func isSelected(_ country: String) -> Bool {
         selectedCountries.contains(country)
     }
 
@@ -328,11 +342,11 @@ final class CountryChipInputView: UIView {
 
 extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
 
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+    public func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         items.count
     }
 
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+    public func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         switch items[indexPath.item] {
         case .chip(let country):
             let cell = collectionView.dequeueReusableCell(
@@ -372,7 +386,7 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
         }
     }
 
-    func collectionView(
+    public func collectionView(
         _ collectionView: UICollectionView,
         layout collectionViewLayout: UICollectionViewLayout,
         sizeForItemAt indexPath: IndexPath
@@ -405,7 +419,7 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
         }
     }
 
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+    public func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         if case .textEntry = items[indexPath.item] {
             focusTextEntry()
         }
