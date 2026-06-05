@@ -37,7 +37,7 @@ platform :ios, '16.0'
 use_frameworks!
 
 target 'YourAppTarget' do
-  pod 'ChipUI', :git => 'https://github.com/nikhildhavale/chipui.git', :branch => 'main'
+  pod 'ChipUI', :git => 'https://github.com/nikhildhavale/chipui.git'
 end
 ```
 
