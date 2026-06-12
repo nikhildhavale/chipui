@@ -35,6 +35,7 @@ public struct ChipInputConfiguration {
     public var labelText: String
     public var ccIcon: ChipIcon?
     public var settingsIcon: ChipIcon?
+    public var maxHeight: CGFloat?
     public var onCcTapped: (() -> Void)?
     public var onSettingsTapped: (() -> Void)?
 
@@ -42,12 +43,14 @@ public struct ChipInputConfiguration {
         labelText: String = "To",
         ccIcon: ChipIcon? = nil,
         settingsIcon: ChipIcon? = nil,
+        maxHeight: CGFloat? = nil,
         onCcTapped: (() -> Void)? = nil,
         onSettingsTapped: (() -> Void)? = nil
     ) {
         self.labelText = labelText
         self.ccIcon = ccIcon
         self.settingsIcon = settingsIcon
+        self.maxHeight = maxHeight
         self.onCcTapped = onCcTapped
         self.onSettingsTapped = onSettingsTapped
     }
@@ -128,6 +131,7 @@ public final class CountryChipInputView: UIView {
 
     private func applyConfiguration() {
         fieldLabel.text = configuration.labelText
+        updateChipCollectionHeight()
 
         if let icon = configuration.ccIcon {
             ccButton.setImage(icon.image, for: .normal)
@@ -330,7 +334,15 @@ public final class CountryChipInputView: UIView {
         chipCollectionView.layoutIfNeeded()
 
         let contentHeight = chipCollectionView.collectionViewLayout.collectionViewContentSize.height
-        let nextHeight = max(52, contentHeight)
+        var nextHeight = max(52, contentHeight)
+        if let maxHeight = configuration.maxHeight {
+            nextHeight = min(nextHeight, max(52, maxHeight))
+        }
+
+        let shouldScroll = contentHeight > nextHeight + 0.5
+        chipCollectionView.isScrollEnabled = shouldScroll
+        chipCollectionView.showsVerticalScrollIndicator = shouldScroll
+
         guard chipCollectionHeightConstraint?.constant != nextHeight else { return }
 
         chipCollectionHeightConstraint?.constant = nextHeight

@@ -163,6 +163,7 @@ private final class CountryChipInputListCell: UICollectionViewCell {
     ) {
         chipInputView.onHeightChanged = onHeightChanged
         chipInputView.onAutocompleteChanged = onAutocompleteChanged
+        chipInputView.configuration = ChipInputConfiguration(maxHeight: 120)
     }
 
     override func apply(_ layoutAttributes: UICollectionViewLayoutAttributes) {
