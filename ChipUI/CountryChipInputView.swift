@@ -169,8 +169,8 @@ public final class CountryChipInputView: UIView {
         fieldContainer.layer.borderWidth = 1
         fieldContainer.layer.borderColor = UIColor.systemBlue.cgColor
 
-        fieldLabel.font = .preferredFont(forTextStyle: .caption1)
-        fieldLabel.textColor = .systemBlue
+        fieldLabel.font = .systemFont(ofSize: 17)
+        fieldLabel.textColor = .label
         fieldLabel.adjustsFontForContentSizeCategory = true
         fieldLabel.setContentHuggingPriority(.required, for: .horizontal)
         fieldLabel.setContentCompressionResistancePriority(.required, for: .horizontal)

@@ -35,9 +35,9 @@ final class CountryChipCell: UICollectionViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
 
-        chipContainer.backgroundColor = .systemBlue.withAlphaComponent(0.14)
+        chipContainer.backgroundColor = .systemFill
         chipContainer.layer.cornerRadius = 18
-        chipContainer.layer.borderColor = UIColor.systemBlue.withAlphaComponent(0.35).cgColor
+        chipContainer.layer.borderColor = UIColor.label.cgColor
         chipContainer.layer.borderWidth = 1
 
         titleLabel.font = .preferredFont(forTextStyle: .body)
@@ -46,7 +46,7 @@ final class CountryChipCell: UICollectionViewCell {
         titleLabel.adjustsFontForContentSizeCategory = true
 
         removeButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
-        removeButton.tintColor = .systemBlue
+        removeButton.tintColor = .label
         removeButton.setContentHuggingPriority(.required, for: .horizontal)
         removeButton.addTarget(self, action: #selector(removeTapped), for: .touchUpInside)
 
@@ -61,8 +61,8 @@ final class CountryChipCell: UICollectionViewCell {
         NSLayoutConstraint.activate([
             chipContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             chipContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            chipContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
-            chipContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -2),
+            chipContainer.topAnchor.constraint(equalTo: contentView.topAnchor),
+            chipContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
             titleLabel.leadingAnchor.constraint(equalTo: chipContainer.leadingAnchor, constant: 14),
             titleLabel.topAnchor.constraint(equalTo: chipContainer.topAnchor, constant: 7),
