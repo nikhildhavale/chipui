@@ -121,6 +121,9 @@ final class ComposeViewController: UIViewController {
 - `labelText`: leading field label, defaults to `"To"`.
 - `ccIcon`: optional trailing action for a Cc-style button.
 - `settingsIcon`: optional trailing action button; it is shown only when at least one chip is selected.
+- `maxHeight`: optional cap on the chip area's height; when content exceeds it the chips scroll vertically inside the field.
+- `ccButtonTintColor`: optional tint for the Cc button (applies to both image and `.title(...)` text). Defaults to `.systemBlue`.
+- `settingsButtonTintColor`: optional tint for the settings button (applies to both image and `.title(...)` text). Defaults to `.systemBlue`.
 - `onCcTapped`: callback when the Cc button is tapped.
 - `onSettingsTapped`: callback when the settings button is tapped.
 

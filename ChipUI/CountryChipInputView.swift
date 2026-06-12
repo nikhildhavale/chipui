@@ -36,6 +36,8 @@ public struct ChipInputConfiguration {
     public var ccIcon: ChipIcon?
     public var settingsIcon: ChipIcon?
     public var maxHeight: CGFloat?
+    public var ccButtonTintColor: UIColor?
+    public var settingsButtonTintColor: UIColor?
     public var onCcTapped: (() -> Void)?
     public var onSettingsTapped: (() -> Void)?
 
@@ -44,6 +46,8 @@ public struct ChipInputConfiguration {
         ccIcon: ChipIcon? = nil,
         settingsIcon: ChipIcon? = nil,
         maxHeight: CGFloat? = nil,
+        ccButtonTintColor: UIColor? = nil,
+        settingsButtonTintColor: UIColor? = nil,
         onCcTapped: (() -> Void)? = nil,
         onSettingsTapped: (() -> Void)? = nil
     ) {
@@ -51,6 +55,8 @@ public struct ChipInputConfiguration {
         self.ccIcon = ccIcon
         self.settingsIcon = settingsIcon
         self.maxHeight = maxHeight
+        self.ccButtonTintColor = ccButtonTintColor
+        self.settingsButtonTintColor = settingsButtonTintColor
         self.onCcTapped = onCcTapped
         self.onSettingsTapped = onSettingsTapped
     }
@@ -133,6 +139,10 @@ public final class CountryChipInputView: UIView {
         fieldLabel.text = configuration.labelText
         updateChipCollectionHeight()
 
+        let ccTint = configuration.ccButtonTintColor ?? .systemBlue
+        ccButton.tintColor = ccTint
+        ccButton.setTitleColor(ccTint, for: .normal)
+
         if let icon = configuration.ccIcon {
             ccButton.setImage(icon.image, for: .normal)
             ccButton.setTitle(icon.title, for: .normal)
@@ -142,6 +152,10 @@ public final class CountryChipInputView: UIView {
             ccButton.setTitle(nil, for: .normal)
             ccButton.isHidden = true
         }
+
+        let settingsTint = configuration.settingsButtonTintColor ?? .systemBlue
+        settingsButton.tintColor = settingsTint
+        settingsButton.setTitleColor(settingsTint, for: .normal)
 
         let shouldShowSettings = configuration.settingsIcon != nil && !selectedCountries.isEmpty
         if shouldShowSettings, let icon = configuration.settingsIcon {
