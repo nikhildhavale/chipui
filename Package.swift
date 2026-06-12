@@ -28,7 +28,8 @@ let package = Package(
             sources: [
                 "CountryChipInputView.swift",
                 "CountryChipCells.swift",
-                "CollectionViewHelpers.swift"
+                "CollectionViewHelpers.swift",
+                "AutocompleteOverlayView.swift"
             ]
         )
     ]

@@ -23,7 +23,8 @@ Pod::Spec.new do |s|
   s.source_files = [
     'ChipUI/CountryChipInputView.swift',
     'ChipUI/CountryChipCells.swift',
-    'ChipUI/CollectionViewHelpers.swift'
+    'ChipUI/CollectionViewHelpers.swift',
+    'ChipUI/AutocompleteOverlayView.swift'
   ]
 
   s.exclude_files = ['Package.swift']
