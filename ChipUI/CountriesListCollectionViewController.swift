@@ -9,11 +9,12 @@ import UIKit
 
 final class CountriesListCollectionViewController: UICollectionViewController {
 
-    var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
+    var onSuggestionsChanged: ((ChipInputView, [ChipItem], Bool, ChipInputConfiguration) -> Void)?
     var onScroll: (() -> Void)?
 
     private enum Row: Int, CaseIterable {
         case header
+        case recipientChipInput
         case countryChipInput
     }
 
@@ -37,7 +38,7 @@ final class CountriesListCollectionViewController: UICollectionViewController {
         collectionView.keyboardDismissMode = .interactive
         collectionView.clipsToBounds = false
         collectionView.register(TextListCell.self, forCellWithReuseIdentifier: TextListCell.reuseIdentifier)
-        collectionView.register(CountryChipInputListCell.self, forCellWithReuseIdentifier: CountryChipInputListCell.reuseIdentifier)
+        collectionView.register(ChipInputListCell.self, forCellWithReuseIdentifier: ChipInputListCell.reuseIdentifier)
     }
 
     private static func makeLayout() -> UICollectionViewLayout {
@@ -66,26 +67,40 @@ final class CountriesListCollectionViewController: UICollectionViewController {
                 for: indexPath
             ) as! TextListCell
             cell.configure(
-                title: "MDC-Style Country Chips",
-                subtitle: "This screen is a child UICollectionViewController list. The country chip autocomplete input is one list cell."
+                title: "Generic Chip Input",
+                subtitle: "The first field simulates server-backed recipients. The second field keeps the old country picker data in local-filter mode."
+            )
+            return cell
+
+        case .recipientChipInput:
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: ChipInputListCell.reuseIdentifier,
+                for: indexPath
+            ) as! ChipInputListCell
+            cell.configureRemoteRecipients(
+                onHeightChanged: { [weak collectionView] in
+                    collectionView?.collectionViewLayout.invalidateLayout()
+                },
+                onSuggestionsChanged: { [weak self] inputView, suggestions, loading, configuration in
+                    self?.onSuggestionsChanged?(inputView, suggestions, loading, configuration)
+                }
             )
             return cell
 
         case .countryChipInput:
             let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: CountryChipInputListCell.reuseIdentifier,
+                withReuseIdentifier: ChipInputListCell.reuseIdentifier,
                 for: indexPath
-            ) as! CountryChipInputListCell
-            cell.configure(
+            ) as! ChipInputListCell
+            cell.configureLocalCountries(
                 onHeightChanged: { [weak collectionView] in
                     collectionView?.collectionViewLayout.invalidateLayout()
                 },
-                onAutocompleteChanged: { [weak self] inputView, suggestions in
-                    self?.onAutocompleteChanged?(inputView, suggestions)
+                onSuggestionsChanged: { [weak self] inputView, suggestions, loading, configuration in
+                    self?.onSuggestionsChanged?(inputView, suggestions, loading, configuration)
                 }
             )
             return cell
-
         }
     }
 }
@@ -141,11 +156,37 @@ private final class TextListCell: UICollectionViewCell {
     }
 }
 
-private final class CountryChipInputListCell: UICollectionViewCell {
+private final class ChipInputListCell: UICollectionViewCell {
 
-    static let reuseIdentifier = "CountryChipInputListCell"
+    static let reuseIdentifier = "ChipInputListCell"
 
-    private let chipInputView = CountryChipInputView()
+    private static let teamAll = ChipSuggestion(
+        id: "team:all",
+        title: "All Hands",
+        subtitle: "Company-wide team",
+        image: .initials("AH")
+    )
+
+    private static let recipientSamples: [ChipSuggestion] = [
+        ChipSuggestion(id: "user:aditi", title: "Aditi Rao", subtitle: "Product Design", image: .initials("AR")),
+        ChipSuggestion(id: "user:ben", title: "Ben Carter", subtitle: "iOS Engineering", image: .initials("BC")),
+        ChipSuggestion(id: "user:chen", title: "Chen Wei", subtitle: "Backend Engineering", image: .initials("CW")),
+        ChipSuggestion(id: "team:mobile", title: "Mobile Team", subtitle: "12 members", image: .initials("MT")),
+        ChipSuggestion(id: "team:support", title: "Customer Support", subtitle: "8 members", image: .initials("CS")),
+        ChipSuggestion(id: "user:fatima", title: "Fatima Khan", subtitle: "QA", image: .initials("FK")),
+        ChipSuggestion(id: "user:liam", title: "Liam Smith", subtitle: "Sales", image: .initials("LS"))
+    ]
+
+    private static let countrySamples: [ChipSuggestion] = Locale.Region.isoRegions
+        .compactMap { region -> ChipSuggestion? in
+            guard let name = Locale.current.localizedString(forRegionCode: region.identifier) else { return nil }
+            return ChipSuggestion(id: region.identifier, title: name, subtitle: region.identifier, image: .initials(String(name.prefix(2))))
+        }
+        .removingDuplicateChipIDs()
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+
+    private let chipInputView = ChipInputView()
+    private var pendingRemoteSearch: DispatchWorkItem?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -157,13 +198,87 @@ private final class CountryChipInputListCell: UICollectionViewCell {
         configure()
     }
 
-    func configure(
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        pendingRemoteSearch?.cancel()
+        pendingRemoteSearch = nil
+        chipInputView.clearLocalSuggestions()
+        chipInputView.onQueryChanged = nil
+        chipInputView.onSuggestionsChanged = nil
+        chipInputView.onHeightChanged = nil
+        chipInputView.setSelectedItems([])
+    }
+
+    func configureRemoteRecipients(
         onHeightChanged: @escaping () -> Void,
-        onAutocompleteChanged: @escaping (CountryChipInputView, [String]) -> Void
+        onSuggestionsChanged: @escaping (ChipInputView, [ChipItem], Bool, ChipInputConfiguration) -> Void
     ) {
+        let configuration = ChipInputConfiguration(
+            labelText: "Share with",
+            ccIcon: .title("Cc"),
+            settingsIcon: .system("slider.horizontal.3"),
+            maxHeight: 120,
+            placeholderText: "Search colleagues or teams",
+            emptyResultsText: "No recipients found.",
+            loadingText: "Searching recipients...",
+            matchCountTextProvider: { count in count == 0 ? nil : "\(count) recipients" },
+            nonRemovableItemIDs: [Self.teamAll.id]
+        )
+
+        chipInputView.configuration = configuration
         chipInputView.onHeightChanged = onHeightChanged
-        chipInputView.onAutocompleteChanged = onAutocompleteChanged
-        chipInputView.configuration = ChipInputConfiguration(maxHeight: 120)
+        chipInputView.onSuggestionsChanged = { inputView, suggestions, loading in
+            onSuggestionsChanged(inputView, suggestions, loading, configuration)
+        }
+        chipInputView.setSelectedItems([Self.teamAll])
+
+        chipInputView.onQueryChanged = { [weak self, weak chipInputView] query in
+            guard let self, let chipInputView else { return }
+            self.pendingRemoteSearch?.cancel()
+            chipInputView.setLoading(true)
+
+            let workItem = DispatchWorkItem {
+                let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                let matches: [ChipSuggestion]
+                if trimmedQuery.isEmpty {
+                    matches = Array(Self.recipientSamples.prefix(5))
+                } else {
+                    matches = Self.recipientSamples.filter {
+                        $0.title.localizedCaseInsensitiveContains(trimmedQuery) ||
+                        ($0.subtitle?.localizedCaseInsensitiveContains(trimmedQuery) ?? false)
+                    }
+                }
+
+                chipInputView.setLoading(false)
+                chipInputView.updateSuggestions(matches)
+            }
+            self.pendingRemoteSearch = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
+        }
+    }
+
+    func configureLocalCountries(
+        onHeightChanged: @escaping () -> Void,
+        onSuggestionsChanged: @escaping (ChipInputView, [ChipItem], Bool, ChipInputConfiguration) -> Void
+    ) {
+        let configuration = ChipInputConfiguration(
+            labelText: "Country",
+            maxHeight: 120,
+            placeholderText: "Search countries",
+            emptyResultsText: "No matching countries.",
+            matchCountTextProvider: { count in count == 0 ? nil : "\(count) matching countries" }
+        )
+
+        chipInputView.configuration = configuration
+        chipInputView.onHeightChanged = onHeightChanged
+        chipInputView.onSuggestionsChanged = { inputView, suggestions, loading in
+            onSuggestionsChanged(inputView, suggestions, loading, configuration)
+        }
+        chipInputView.setSelectedItems([
+            ChipSuggestion(id: "IN", title: "India", subtitle: "IN", image: .initials("IN")),
+            ChipSuggestion(id: "US", title: "United States", subtitle: "US", image: .initials("US"))
+        ])
+        chipInputView.setLocalSuggestions(Self.countrySamples)
     }
 
     override func apply(_ layoutAttributes: UICollectionViewLayoutAttributes) {
@@ -186,5 +301,13 @@ private final class CountryChipInputListCell: UICollectionViewCell {
             chipInputView.topAnchor.constraint(equalTo: contentView.layoutMarginsGuide.topAnchor),
             chipInputView.bottomAnchor.constraint(equalTo: contentView.layoutMarginsGuide.bottomAnchor)
         ])
+    }
+}
+
+private extension Array where Element == ChipSuggestion {
+
+    func removingDuplicateChipIDs() -> [ChipSuggestion] {
+        var seen = Set<String>()
+        return filter { seen.insert($0.id).inserted }
     }
 }

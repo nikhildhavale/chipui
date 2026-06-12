@@ -21,8 +21,8 @@ Pod::Spec.new do |s|
   s.frameworks            = 'UIKit'
 
   s.source_files = [
-    'ChipUI/CountryChipInputView.swift',
-    'ChipUI/CountryChipCells.swift',
+    'ChipUI/ChipInputView.swift',
+    'ChipUI/ChipCells.swift',
     'ChipUI/CollectionViewHelpers.swift',
     'ChipUI/AutocompleteOverlayView.swift'
   ]

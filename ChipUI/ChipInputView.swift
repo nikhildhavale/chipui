@@ -1,11 +1,38 @@
 //
-//  CountryChipInputView.swift
+//  ChipInputView.swift
 //  ChipUI
 //
 //  Created by Nikhil Dhavale on 26/05/26.
 //
 
 import UIKit
+
+public enum ChipImage {
+    case remote(URL)
+    case local(UIImage)
+    case initials(String)
+}
+
+public protocol ChipItem {
+    var id: String { get }
+    var title: String { get }
+    var subtitle: String? { get }
+    var image: ChipImage? { get }
+}
+
+public struct ChipSuggestion: ChipItem {
+    public let id: String
+    public let title: String
+    public let subtitle: String?
+    public let image: ChipImage?
+
+    public init(id: String, title: String, subtitle: String? = nil, image: ChipImage? = nil) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.image = image
+    }
+}
 
 public enum ChipIcon {
     case system(String)
@@ -38,6 +65,11 @@ public struct ChipInputConfiguration {
     public var maxHeight: CGFloat?
     public var ccButtonTintColor: UIColor?
     public var settingsButtonTintColor: UIColor?
+    public var placeholderText: String
+    public var emptyResultsText: String
+    public var loadingText: String?
+    public var matchCountTextProvider: ((Int) -> String?)?
+    public var nonRemovableItemIDs: Set<String>
     public var onCcTapped: (() -> Void)?
     public var onSettingsTapped: (() -> Void)?
 
@@ -48,6 +80,11 @@ public struct ChipInputConfiguration {
         maxHeight: CGFloat? = nil,
         ccButtonTintColor: UIColor? = nil,
         settingsButtonTintColor: UIColor? = nil,
+        placeholderText: String = "",
+        emptyResultsText: String = "",
+        loadingText: String? = nil,
+        matchCountTextProvider: ((Int) -> String?)? = nil,
+        nonRemovableItemIDs: Set<String> = [],
         onCcTapped: (() -> Void)? = nil,
         onSettingsTapped: (() -> Void)? = nil
     ) {
@@ -57,33 +94,40 @@ public struct ChipInputConfiguration {
         self.maxHeight = maxHeight
         self.ccButtonTintColor = ccButtonTintColor
         self.settingsButtonTintColor = settingsButtonTintColor
+        self.placeholderText = placeholderText
+        self.emptyResultsText = emptyResultsText
+        self.loadingText = loadingText
+        self.matchCountTextProvider = matchCountTextProvider
+        self.nonRemovableItemIDs = nonRemovableItemIDs
         self.onCcTapped = onCcTapped
         self.onSettingsTapped = onSettingsTapped
     }
 }
 
-public final class CountryChipInputView: UIView {
+public final class ChipInputView: UIView {
 
     public var onHeightChanged: (() -> Void)?
-    public var onAutocompleteChanged: ((CountryChipInputView, [String]) -> Void)?
+    public var onQueryChanged: ((String) -> Void)?
+    public var onSelectionChanged: (([ChipItem]) -> Void)?
+    public var onSuggestionsChanged: ((ChipInputView, [ChipItem], Bool) -> Void)?
+
+    public private(set) var selectedItems: [ChipItem] = []
 
     public var configuration = ChipInputConfiguration() {
         didSet { applyConfiguration() }
     }
 
     private enum Item {
-        case chip(String)
+        case chip(ChipItem)
         case textEntry
     }
 
-    private let countries = Locale.Region.isoRegions
-        .compactMap { Locale.current.localizedString(forRegionCode: $0.identifier) }
-        .removingDuplicates()
-        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-
-    private var selectedCountries = ["India", "United States"]
-    private var filteredCountries: [String] = []
+    private var suggestions: [ChipItem] = []
+    private var localSuggestions: [ChipItem]?
+    private var isLoading = false
     private var query = ""
+    private var isTextFieldFocused = false
+    private var pendingQueryWorkItem: DispatchWorkItem?
 
     private let fieldContainer = UIView()
     private let fieldLabel = UILabel()
@@ -93,7 +137,7 @@ public final class CountryChipInputView: UIView {
     private let trailingButtonsStack = UIStackView()
     private let chipCollectionView = IntrinsicCollectionView(
         frame: .zero,
-        collectionViewLayout: CountryChipInputView.makeChipFlowLayout()
+        collectionViewLayout: ChipInputView.makeChipFlowLayout()
     )
 
     private weak var activeTextField: UITextField?
@@ -107,6 +151,10 @@ public final class CountryChipInputView: UIView {
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
         configure()
+    }
+
+    deinit {
+        pendingQueryWorkItem?.cancel()
     }
 
     public override func layoutSubviews() {
@@ -124,7 +172,7 @@ public final class CountryChipInputView: UIView {
     }
 
     private var items: [Item] {
-        selectedCountries.map(Item.chip) + [.textEntry]
+        selectedItems.map(Item.chip) + [.textEntry]
     }
 
     private func configure() {
@@ -132,11 +180,13 @@ public final class CountryChipInputView: UIView {
         configureChipField()
         configureLayout()
         applyConfiguration()
-        updateAutocomplete()
+        updateHelperText()
     }
 
     private func applyConfiguration() {
         fieldLabel.text = configuration.labelText
+        activeTextField?.placeholder = configuration.placeholderText
+        updateHelperText()
         updateChipCollectionHeight()
 
         let ccTint = configuration.ccButtonTintColor ?? .systemBlue
@@ -157,7 +207,7 @@ public final class CountryChipInputView: UIView {
         settingsButton.tintColor = settingsTint
         settingsButton.setTitleColor(settingsTint, for: .normal)
 
-        let shouldShowSettings = configuration.settingsIcon != nil && !selectedCountries.isEmpty
+        let shouldShowSettings = configuration.settingsIcon != nil && !selectedItems.isEmpty
         if shouldShowSettings, let icon = configuration.settingsIcon {
             settingsButton.setImage(icon.image, for: .normal)
             settingsButton.setTitle(icon.title, for: .normal)
@@ -216,7 +266,7 @@ public final class CountryChipInputView: UIView {
         chipCollectionView.keyboardDismissMode = .none
         chipCollectionView.semanticContentAttribute = .forceLeftToRight
         chipCollectionView.contentInsetAdjustmentBehavior = .never
-        chipCollectionView.register(CountryChipCell.self, forCellWithReuseIdentifier: CountryChipCell.reuseIdentifier)
+        chipCollectionView.register(ChipCell.self, forCellWithReuseIdentifier: ChipCell.reuseIdentifier)
         chipCollectionView.register(ChipTextEntryCell.self, forCellWithReuseIdentifier: ChipTextEntryCell.reuseIdentifier)
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleFieldTap))
@@ -272,60 +322,84 @@ public final class CountryChipInputView: UIView {
         fieldContainer.convert(fieldContainer.bounds, to: view)
     }
 
-    public func toggleSuggestion(_ country: String) {
-        if let index = selectedCountries.firstIndex(of: country) {
-            removeCountry(at: index)
+    public func updateSuggestions(_ items: [ChipItem]) {
+        suggestions = items
+        updateHelperText()
+        onSuggestionsChanged?(self, suggestions, isLoading)
+    }
+
+    public func setLoading(_ loading: Bool) {
+        isLoading = loading
+        updateHelperText()
+        onSuggestionsChanged?(self, suggestions, isLoading)
+    }
+
+    public func setLocalSuggestions(_ items: [ChipItem]) {
+        localSuggestions = items
+        filterLocalSuggestions()
+    }
+
+    public func clearLocalSuggestions() {
+        localSuggestions = nil
+        suggestions = []
+        updateHelperText()
+    }
+
+    public func toggleSuggestion(_ item: ChipItem) {
+        if let index = selectedItems.firstIndex(where: { $0.id == item.id }) {
+            removeItem(at: index)
         } else {
-            addCountry(country, clearQuery: false)
+            addItem(item, clearQuery: false)
         }
     }
 
-    public func isSelected(_ country: String) -> Bool {
-        selectedCountries.contains(country)
+    public func isSelected(_ item: ChipItem) -> Bool {
+        isSelected(id: item.id)
     }
 
-    private func updateAutocomplete() {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmedQuery.isEmpty {
-            filteredCountries = Array(countries.prefix(12))
-            helperLabel.text = ""
-        } else {
-            filteredCountries = countries.filter {
-                $0.localizedCaseInsensitiveContains(trimmedQuery)
-            }
-            helperLabel.text = filteredCountries.isEmpty ? "No matching countries." : "\(filteredCountries.count) matching countries"
-        }
-
-        onAutocompleteChanged?(self, filteredCountries)
+    public func isSelected(id: String) -> Bool {
+        selectedItems.contains { $0.id == id }
     }
 
-    private func addCountry(_ country: String, clearQuery: Bool = true) {
-        guard !selectedCountries.contains(country) else { return }
+    public func setSelectedItems(_ items: [ChipItem]) {
+        selectedItems = items.removingDuplicateChipIDs()
+        query = ""
+        activeTextField?.text = ""
+        chipCollectionView.reloadData()
+        updateChipCollectionHeight()
+        applyConfiguration()
+        onSelectionChanged?(selectedItems)
+    }
 
-        selectedCountries.append(country)
+    private func addItem(_ item: ChipItem, clearQuery: Bool = true) {
+        guard !isSelected(id: item.id) else { return }
+
+        selectedItems.append(item)
         if clearQuery {
             query = ""
             activeTextField?.text = ""
         }
         chipCollectionView.reloadData()
         updateChipCollectionHeight()
-        updateAutocomplete()
         applyConfiguration()
+        filterLocalSuggestions()
+        onSelectionChanged?(selectedItems)
 
         DispatchQueue.main.async { [weak self] in
             self?.focusTextEntry()
         }
     }
 
-    private func removeCountry(at index: Int) {
-        guard selectedCountries.indices.contains(index) else { return }
+    private func removeItem(at index: Int) {
+        guard selectedItems.indices.contains(index) else { return }
+        guard !configuration.nonRemovableItemIDs.contains(selectedItems[index].id) else { return }
 
-        selectedCountries.remove(at: index)
+        selectedItems.remove(at: index)
         chipCollectionView.reloadData()
         updateChipCollectionHeight()
-        updateAutocomplete()
         applyConfiguration()
+        filterLocalSuggestions()
+        onSelectionChanged?(selectedItems)
 
         DispatchQueue.main.async { [weak self] in
             self?.focusTextEntry()
@@ -333,13 +407,82 @@ public final class CountryChipInputView: UIView {
     }
 
     private func focusTextEntry() {
-        let textEntryIndexPath = IndexPath(item: selectedCountries.count, section: 0)
+        let textEntryIndexPath = IndexPath(item: selectedItems.count, section: 0)
         chipCollectionView.scrollToItem(at: textEntryIndexPath, at: .bottom, animated: false)
         chipCollectionView.layoutIfNeeded()
         if let cell = chipCollectionView.cellForItem(at: textEntryIndexPath) as? ChipTextEntryCell {
             cell.focus()
         } else {
             activeTextField?.becomeFirstResponder()
+        }
+    }
+
+    private func textDidBeginEditing(_ textField: UITextField) {
+        activeTextField = textField
+        isTextFieldFocused = true
+        if query.isEmpty {
+            queryDidChange("")
+        }
+    }
+
+    private func textDidEndEditing() {
+        isTextFieldFocused = false
+        pendingQueryWorkItem?.cancel()
+        pendingQueryWorkItem = nil
+    }
+
+    private func queryDidChange(_ text: String) {
+        query = text
+        filterLocalSuggestions()
+        scheduleQueryChanged()
+        updateChipCollectionHeight()
+    }
+
+    private func scheduleQueryChanged() {
+        pendingQueryWorkItem?.cancel()
+
+        guard localSuggestions == nil, isTextFieldFocused else { return }
+
+        let query = query
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isTextFieldFocused else { return }
+            self.onQueryChanged?(query)
+        }
+        pendingQueryWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+    }
+
+    private func filterLocalSuggestions() {
+        guard let localSuggestions else {
+            updateHelperText()
+            onSuggestionsChanged?(self, suggestions, isLoading)
+            return
+        }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedQuery.isEmpty {
+            suggestions = Array(localSuggestions.prefix(12))
+        } else {
+            suggestions = localSuggestions.filter {
+                $0.title.localizedCaseInsensitiveContains(trimmedQuery) ||
+                ($0.subtitle?.localizedCaseInsensitiveContains(trimmedQuery) ?? false)
+            }
+        }
+        updateHelperText()
+        onSuggestionsChanged?(self, suggestions, isLoading)
+    }
+
+    private func updateHelperText() {
+        if isLoading {
+            helperLabel.text = configuration.loadingText
+            return
+        }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedQuery.isEmpty && suggestions.isEmpty {
+            helperLabel.text = configuration.emptyResultsText
+        } else {
+            helperLabel.text = configuration.matchCountTextProvider?(suggestions.count)
         }
     }
 
@@ -362,11 +505,10 @@ public final class CountryChipInputView: UIView {
         chipCollectionHeightConstraint?.constant = nextHeight
         invalidateIntrinsicContentSize()
         onHeightChanged?()
-        onAutocompleteChanged?(self, filteredCountries)
     }
 }
 
-extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+extension ChipInputView: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
 
     public func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         items.count
@@ -374,14 +516,17 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
 
     public func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         switch items[indexPath.item] {
-        case .chip(let country):
+        case .chip(let item):
             let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: CountryChipCell.reuseIdentifier,
+                withReuseIdentifier: ChipCell.reuseIdentifier,
                 for: indexPath
-            ) as! CountryChipCell
+            ) as! ChipCell
 
-            cell.configure(title: country) { [weak self] in
-                self?.removeCountry(at: indexPath.item)
+            cell.configure(
+                item: item,
+                isRemovable: !configuration.nonRemovableItemIDs.contains(item.id)
+            ) { [weak self] in
+                self?.removeItem(at: indexPath.item)
             }
             return cell
 
@@ -393,18 +538,23 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
 
             cell.configure(
                 text: query,
+                placeholder: configuration.placeholderText,
                 onTextChanged: { [weak self] textField, text in
                     self?.activeTextField = textField
-                    self?.query = text
-                    self?.updateAutocomplete()
-                    self?.updateChipCollectionHeight()
+                    self?.queryDidChange(text)
+                },
+                onBeginEditing: { [weak self] textField in
+                    self?.textDidBeginEditing(textField)
+                },
+                onEndEditing: { [weak self] in
+                    self?.textDidEndEditing()
                 },
                 onReturn: { [weak self] in
                     self?.acceptCurrentSuggestion()
                 },
                 onBackspaceWhenEmpty: { [weak self] in
-                    guard let self, !self.selectedCountries.isEmpty else { return }
-                    self.removeCountry(at: self.selectedCountries.count - 1)
+                    guard let self, !self.selectedItems.isEmpty else { return }
+                    self.removeItem(at: self.selectedItems.count - 1)
                 }
             )
             activeTextField = cell.textField
@@ -418,14 +568,14 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
         switch items[indexPath.item] {
-        case .chip(let country):
+        case .chip(let item):
             let font = UIFont.preferredFont(forTextStyle: .body)
             let maxCellWidth = max(collectionView.bounds.width - 24, 1)
-            let horizontalPadding: CGFloat = 58
+            let horizontalPadding: CGFloat = configuration.nonRemovableItemIDs.contains(item.id) ? 58 : 88
             let verticalPadding: CGFloat = 18
             let maxTextWidth = maxCellWidth - horizontalPadding
 
-            let textBounds = (country as NSString).boundingRect(
+            let textBounds = (item.title as NSString).boundingRect(
                 with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading],
                 attributes: [.font: font],
@@ -437,7 +587,7 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
             return CGSize(width: width, height: height)
 
         case .textEntry:
-            let text = query.isEmpty ? "Search countries" : query
+            let text = query.isEmpty ? configuration.placeholderText : query
             let font = UIFont.preferredFont(forTextStyle: .body)
             let maxCellWidth = max(collectionView.bounds.width - 24, 120)
             let textWidth = (text as NSString).size(withAttributes: [.font: font]).width + 28
@@ -452,7 +602,15 @@ extension CountryChipInputView: UICollectionViewDataSource, UICollectionViewDele
     }
 
     private func acceptCurrentSuggestion() {
-        guard let country = filteredCountries.first(where: { !selectedCountries.contains($0) }) else { return }
-        addCountry(country)
+        guard let item = suggestions.first(where: { !isSelected(id: $0.id) }) else { return }
+        addItem(item)
+    }
+}
+
+private extension Array where Element == ChipItem {
+
+    func removingDuplicateChipIDs() -> [ChipItem] {
+        var seen = Set<String>()
+        return filter { seen.insert($0.id).inserted }
     }
 }

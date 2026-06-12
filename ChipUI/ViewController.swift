@@ -11,8 +11,9 @@ final class ViewController: UIViewController {
 
     private let listViewController = CountriesListCollectionViewController()
     private let autocompleteOverlay = AutocompleteOverlayView()
-    private var activeChipInputView: CountryChipInputView?
-    private var autocompleteSuggestions: [String] = []
+    private var activeChipInputView: ChipInputView?
+    private var autocompleteSuggestions: [ChipItem] = []
+    private var autocompleteShowsLoading = false
     private var autocompleteTopConstraint: NSLayoutConstraint?
     private var autocompleteLeadingConstraint: NSLayoutConstraint?
     private var autocompleteWidthConstraint: NSLayoutConstraint?
@@ -33,8 +34,13 @@ final class ViewController: UIViewController {
     }
 
     private func addListViewController() {
-        listViewController.onAutocompleteChanged = { [weak self] inputView, suggestions in
-            self?.showAutocomplete(suggestions, anchoredTo: inputView)
+        listViewController.onSuggestionsChanged = { [weak self] inputView, suggestions, loading, configuration in
+            self?.showAutocomplete(
+                suggestions,
+                loading: loading,
+                anchoredTo: inputView,
+                configuration: configuration
+            )
         }
         listViewController.onScroll = { [weak self] in
             self?.positionAutocomplete()
@@ -56,11 +62,11 @@ final class ViewController: UIViewController {
 
     private func configureAutocompleteOverlay() {
         autocompleteOverlay.isHidden = true
-        autocompleteOverlay.onToggle = { [weak self] value in
-            self?.activeChipInputView?.toggleSuggestion(value)
+        autocompleteOverlay.onToggle = { [weak self] item in
+            self?.activeChipInputView?.toggleSuggestion(item)
         }
-        autocompleteOverlay.isSelected = { [weak self] value in
-            self?.activeChipInputView?.isSelected(value) ?? false
+        autocompleteOverlay.isSelected = { [weak self] id in
+            self?.activeChipInputView?.isSelected(id: id) ?? false
         }
 
         view.addSubview(autocompleteOverlay)
@@ -79,9 +85,17 @@ final class ViewController: UIViewController {
         ])
     }
 
-    private func showAutocomplete(_ suggestions: [String], anchoredTo inputView: CountryChipInputView) {
+    private func showAutocomplete(
+        _ suggestions: [ChipItem],
+        loading: Bool,
+        anchoredTo inputView: ChipInputView,
+        configuration: ChipInputConfiguration
+    ) {
         activeChipInputView = inputView
         autocompleteSuggestions = suggestions
+        autocompleteShowsLoading = loading
+        autocompleteOverlay.emptyResultsText = configuration.emptyResultsText
+        autocompleteOverlay.loadingText = configuration.loadingText
 
         DispatchQueue.main.async { [weak self] in
             self?.positionAutocomplete()
@@ -98,7 +112,8 @@ final class ViewController: UIViewController {
         let preferredTop = anchorFrame.maxY + 6
         let keyboardTop = min(keyboardTopY, view.bounds.maxY)
         let availableBelow = keyboardTop - preferredTop - 8
-        let overlayHeight = suggestions.isEmpty ? 0 : max(0, availableBelow)
+        let hasRows = autocompleteShowsLoading || !suggestions.isEmpty || autocompleteOverlay.emptyResultsText?.isEmpty == false
+        let overlayHeight = hasRows ? max(0, min(availableBelow, 280)) : 0
 
         autocompleteTopConstraint?.constant = preferredTop
         autocompleteLeadingConstraint?.constant = anchorFrame.minX
@@ -106,7 +121,8 @@ final class ViewController: UIViewController {
         autocompleteHeightConstraint?.constant = overlayHeight
 
         autocompleteOverlay.suggestions = suggestions
-        autocompleteOverlay.isHidden = suggestions.isEmpty || overlayHeight <= 0
+        autocompleteOverlay.showsLoading = autocompleteShowsLoading
+        autocompleteOverlay.isHidden = !hasRows || overlayHeight <= 0
         view.bringSubviewToFront(autocompleteOverlay)
     }
 
@@ -141,8 +157,7 @@ final class ViewController: UIViewController {
     }
 
     private func refreshAutocompletePosition() {
-        guard let activeChipInputView else { return }
-        showAutocomplete(autocompleteSuggestions, anchoredTo: activeChipInputView)
+        guard activeChipInputView != nil else { return }
+        positionAutocomplete()
     }
 }
-

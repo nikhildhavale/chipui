@@ -26,8 +26,8 @@ let package = Package(
                 "Base.lproj"
             ],
             sources: [
-                "CountryChipInputView.swift",
-                "CountryChipCells.swift",
+                "ChipInputView.swift",
+                "ChipCells.swift",
                 "CollectionViewHelpers.swift",
                 "AutocompleteOverlayView.swift"
             ]
